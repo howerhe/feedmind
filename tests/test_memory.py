@@ -16,7 +16,6 @@ def test_init_db(db):
 def test_article_exists(db):
     assert db.article_exists("non-existent-id") is False
 
-    now = datetime.now(timezone.utc)
     article = Article(
         id="test-id-123",
         title="Test Article",

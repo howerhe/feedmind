@@ -141,11 +141,11 @@ class Processor:
 
         digests = []
         article_map = {a.id: a for a in new_articles}
-        
+
         # Batch processing: process at most 20 articles per LLM call to avoid hangs
         BATCH_SIZE = 20
         batches = [normal_articles[i:i + BATCH_SIZE] for i in range(0, len(normal_articles), BATCH_SIZE)]
-        
+
         for i, batch in enumerate(batches):
             prompt = self._build_prompt(topic, batch, past_digests, aggregate, is_discourse, prompt_instruction)
 
