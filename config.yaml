@@ -56,3 +56,13 @@ topics:
     prompt: "For each distinct event, write an engaging summary paragraph of approximately 500 words. Ensure your summary captures the original post's question/premise AND the general consensus or interesting points from the replies if any. Write in a lively, engaging, and conversational tone (like a human storyteller or journalist). AVOID stiff, academic, or formulaic phrases like 'The post reflects...', 'Overall, it shows...', or 'Users discussed...'. Just tell the story of the discussion naturally and make it fun to read. You MUST translate and write both the TITLE and SUMMARY strictly in Chinese (简体中文), regardless of the original language."
     feeds:
       - "https://uscardforum.com/top.rss?period=daily"
+
+  - name: "Finance"
+    title: "财经头条"
+    description: "每日财经快讯与市场洞察聚合"
+    aggregate: true
+    summarize: true
+    feeds:
+      - "https://rsshub.app/cls/telegraph"
+      - "https://rsshub.app/jin10"
+      - "https://rsshub.app/wallstreetcn/live"
