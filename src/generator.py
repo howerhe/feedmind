@@ -93,14 +93,18 @@ class RSSGenerator:
             html_content = ""
             for digest in digests_in_group:
                 html_content += f"<h3>{digest.title}</h3>"
-                if digest.image_url:
-                    html_content += f'<img src="{digest.image_url}" style="max-width:100%; height:auto;"/><br/><br/>'
-
                 html_content += f"<p>{digest.summary_paragraph}</p>"
+
+                if digest.image_url:
+                    html_content += f'<img src="{digest.image_url}" referrerpolicy="no-referrer" style="max-width:100%; height:auto;"/><br/><br/>'
+
                 if digest.source_urls:
                     html_content += "<ul>"
-                    for url in digest.source_urls:
-                        html_content += f'<li><a href="{url}">Source</a></li>'
+                    for src in digest.source_urls:
+                        if isinstance(src, str):
+                            html_content += f'<li><a href="{src}">Source</a></li>'
+                        else:
+                            html_content += f'<li><a href="{src["url"]}">{src["title"]}</a></li>'
                     html_content += "</ul>"
                 html_content += "<hr/>"
 
@@ -111,7 +115,8 @@ class RSSGenerator:
             fe.published(max_pub_date.replace(tzinfo=timezone.utc))
 
             if digests_in_group and digests_in_group[0].source_urls:
-                fe.link(href=digests_in_group[0].source_urls[0]) # Main link fallback
+                first_src = digests_in_group[0].source_urls[0]
+                fe.link(href=first_src if isinstance(first_src, str) else first_src["url"]) # Main link fallback
 
         filename = f"digest_{topic_slug}.xml"
         filepath = os.path.join(self.output_dir, filename)

@@ -9,6 +9,7 @@ from src.fetcher import Fetcher
 def mock_session():
     with patch('src.fetcher.requests.Session') as mock_session_cls:
         mock_session_inst = MagicMock()
+        mock_session_inst.__enter__.return_value = mock_session_inst
         mock_session_cls.return_value = mock_session_inst
         yield mock_session_inst
 

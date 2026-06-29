@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 
 @dataclass
@@ -21,7 +21,7 @@ class DigestEvent:
     id: str  # A unique ID for this digest event
     title: str  # AI generated title for the event
     summary_paragraph: str  # AI generated summary
-    source_urls: List[str]  # List of original article URLs that formed this event
+    source_urls: List[Dict[str, str]]  # List of dicts with 'url' and 'title'
     topic: str
     published_at: datetime
     image_url: Optional[str] = None

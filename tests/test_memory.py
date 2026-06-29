@@ -49,7 +49,7 @@ def test_save_and_get_digests(db):
     assert recent[0].id == "digest-1"
     assert recent[0].title == "Digest Title"
     assert recent[0].image_url == "https://test.com/img.jpg"
-    assert recent[0].source_urls == ["https://test.com"]
+    assert recent[0].source_urls == [{"url": "https://test.com", "title": "Source"}]
 
     other_topic = db.get_recent_digests("other-topic", days=1)
     assert len(other_topic) == 0

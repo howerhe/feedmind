@@ -15,14 +15,12 @@ class Fetcher:
     """Fetches and parses RSS feeds and Discourse JSON APIs."""
 
     def __init__(self) -> None:
-        """Initialize the Fetcher with a custom requests session."""
-        # Using curl_cffi to bypass Cloudflare and strict bot protections
-        self.session = requests.Session(impersonate="chrome120")
-        self.session.headers.update({
+        """Initialize the Fetcher with custom headers. Session is created per request to allow browser rotation."""
+        self.headers = {
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15',
             'Accept': 'application/rss+xml, application/rdf+xml, application/atom+xml, application/xml, text/xml, text/html, */*;q=0.8',
             'Accept-Language': 'en-US,en;q=0.9',
-        })
+        }
 
     def fetch_feed(self, feed_url: str, topic: str, is_discourse: bool) -> List[Article]:
         """Fetches a feed and parses it into Article objects.
@@ -37,8 +35,17 @@ class Fetcher:
         """
         logger.info(f"Fetching {feed_url} for topic '{topic}'...")
         try:
-            resp = self.session.get(feed_url, timeout=15)
-            resp.raise_for_status()
+            # Try with chrome124 first
+            with requests.Session(impersonate="chrome124", headers=self.headers) as session:
+                resp = session.get(feed_url, timeout=15)
+                if resp.status_code == 403:
+                    # Fallback to Safari if Chrome fingerprint is blocked
+                    logger.warning(f"Got 403 for {feed_url} with Chrome. Retrying with Safari...")
+                    with requests.Session(impersonate="safari17_0", headers=self.headers) as fallback_session:
+                        resp = fallback_session.get(feed_url, timeout=15)
+                        resp.raise_for_status()
+                else:
+                    resp.raise_for_status()
             parsed = feedparser.parse(resp.content)
         except Exception as e:
             err_msg = f"Failed to fetch {feed_url}: {str(e)}"
@@ -113,7 +120,27 @@ class Fetcher:
         Returns:
             Optional[str]: The URL of the extracted image, or None if no image is found.
         """
-        # 1. Check media_content or enclosures
+        # 1. Check HTML content for <img> tags first (usually more reliable than enclosures for actual content)
+        if content_html:
+            soup = BeautifulSoup(content_html, 'html.parser')
+            for img in soup.find_all('img'):
+                src = img.get('src')
+                if not src:
+                    continue
+
+                # Filter out obvious tracking pixels (1x1)
+                width = img.get('width', '')
+                height = img.get('height', '')
+                if width == '1' or height == '1':
+                    continue
+
+                # Skip known broken/proxy domains if possible
+                if 'plink.anyfeeder.com' in src:
+                    continue
+
+                return src
+
+        # 2. Check media_content or enclosures if no valid img tags found
         if hasattr(entry, 'media_content'):
             for media in entry.media_content:
                 if 'url' in media and media.get('medium') == 'image':
@@ -123,13 +150,6 @@ class Fetcher:
             for enclosure in entry.enclosures:
                 if 'type' in enclosure and enclosure['type'].startswith('image/'):
                     return enclosure.get('href', '')
-
-        # 2. Check HTML content for <img> tags
-        if content_html:
-            soup = BeautifulSoup(content_html, 'html.parser')
-            img_tag = soup.find('img')
-            if img_tag and img_tag.get('src'):
-                return img_tag['src']
 
         return None
 
@@ -159,7 +179,13 @@ class Fetcher:
         try:
             # Discourse API is available by appending .json to the topic URL
             json_url = f"{topic_url}.json"
-            resp = self.session.get(json_url, timeout=10)
+
+            with requests.Session(impersonate="chrome124", headers=self.headers) as session:
+                resp = session.get(json_url, timeout=10)
+                if resp.status_code == 403:
+                    with requests.Session(impersonate="safari17_0", headers=self.headers) as fallback_session:
+                        resp = fallback_session.get(json_url, timeout=10)
+
             if resp.status_code != 200:
                 return ""
 

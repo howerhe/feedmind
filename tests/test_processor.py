@@ -76,8 +76,8 @@ def test_processor_ai_summarize(mock_genai_client, new_articles):
     assert len(digests) == 1
     assert digests[0].title == "Grouped Event"
     assert digests[0].summary_paragraph == "This is an AI summary."
-    assert "https://test.com/1" in digests[0].source_urls
-    assert "https://test.com/2" in digests[0].source_urls
+    assert digests[0].source_urls[0]["url"] == "https://test.com/1"
+    assert digests[0].source_urls[1]["url"] == "https://test.com/2"
 
     # Verify the LLM was called
     mock_genai_client.models.generate_content.assert_called_once()

@@ -41,6 +41,7 @@ topics:
       - "https://rsshub.rssforever.com/oschina/news/industry"
 
   - name: "Solidot"
+    title: "Solidot"
     aggregate: false
     summarize: false
     feeds:

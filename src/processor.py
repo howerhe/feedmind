@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 
 import google.genai as genai
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 from src.models import Article, DigestEvent
 
@@ -94,7 +95,7 @@ class Processor:
                 id=f"pt-{a.id}",
                 title=a.title,
                 summary_paragraph=a.content[:500] + "..." if len(a.content) > 500 else a.content,
-                source_urls=[a.url],
+                source_urls=[{"url": a.url, "title": a.title}],
                 topic=a.topic,
                 published_at=a.published_at,
                 image_url=a.image_url
@@ -125,7 +126,7 @@ class Processor:
                     id=a.id,
                     title=a.title,
                     summary_paragraph=a.content,
-                    source_urls=[a.url],
+                    source_urls=[{"url": a.url, "title": a.title}],
                     topic=a.topic,
                     published_at=a.published_at,
                     image_url=a.image_url
@@ -140,16 +141,7 @@ class Processor:
 
         try:
             logger.info(f"Calling Gemini API for topic '{topic}' with {len(normal_articles)} new articles...")
-            response = self.client.models.generate_content(
-                model=self.model_name,
-                contents=prompt,
-                config={
-                    'response_mime_type': 'application/json',
-                    'response_schema': response_schema,
-                    'temperature': 0.3,
-                },
-            )
-
+            response = self._call_llm(prompt)
             result_json = json.loads(response.text)
 
             digests = []
@@ -157,23 +149,23 @@ class Processor:
 
             for item in result_json.get('events', []):
                 # Ensure we only include valid source URLs
-                urls = []
+                sources = []
                 image_url = None
                 for sid in item['source_ids']:
                     if sid in article_map:
                         article = article_map[sid]
-                        urls.append(article.url)
+                        sources.append({"url": article.url, "title": article.title})
                         if article.image_url and not image_url:
                             image_url = article.image_url
 
-                if not urls:
+                if not sources:
                     continue # Skip if AI hallucinated IDs or there are no sources
 
                 digests.append(DigestEvent(
                     id=f"ai-{uuid.uuid4().hex[:8]}",
                     title=item['title'],
                     summary_paragraph=item['summary'],
-                    source_urls=urls,
+                    source_urls=sources,
                     topic=topic,
                     published_at=datetime.now(timezone.utc),
                     image_url=image_url
@@ -185,6 +177,19 @@ class Processor:
         except Exception as e:
             logger.error(f"Error calling Gemini API for '{topic}': {e}")
             return alerts
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=5, min=10, max=60))
+    def _call_llm(self, prompt: str):
+        """Calls the LLM with exponential backoff retry logic."""
+        return self.client.models.generate_content(
+            model=self.model_name,
+            contents=prompt,
+            config={
+                'response_mime_type': 'application/json',
+                'response_schema': response_schema,
+                'temperature': 0.3,
+            },
+        )
 
     def _build_prompt(self, topic: str, new_articles: List[Article], past_digests: List[DigestEvent], aggregate: bool, is_discourse: bool, prompt_instruction: Optional[str] = None) -> str:
         """Constructs the prompt for the LLM.

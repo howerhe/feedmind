@@ -121,11 +121,19 @@ class MemoryDB:
 
             results = []
             for row in cursor.fetchall():
+                raw_sources = json.loads(row[3])
+                parsed_sources = []
+                for src in raw_sources:
+                    if isinstance(src, str):
+                        parsed_sources.append({"url": src, "title": "Source"})
+                    else:
+                        parsed_sources.append(src)
+
                 results.append(DigestEvent(
                     id=row[0],
                     title=row[1],
                     summary_paragraph=row[2],
-                    source_urls=json.loads(row[3]),
+                    source_urls=parsed_sources,
                     topic=topic,
                     published_at=datetime.fromisoformat(row[4]),
                     image_url=row[5] if len(row) > 5 else None
