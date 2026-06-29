@@ -6,7 +6,8 @@ from datetime import datetime, timezone
 from typing import List, Optional
 
 import google.genai as genai
-from tenacity import retry, stop_after_attempt, wait_exponential
+from google.genai.errors import APIError
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception
 
 from src.models import Article, DigestEvent
 
@@ -178,7 +179,17 @@ class Processor:
             logger.error(f"Error calling Gemini API for '{topic}': {e}")
             return alerts
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=5, min=10, max=60))
+    def _is_retryable_error(exception: Exception) -> bool:
+        if isinstance(exception, APIError):
+            status = getattr(exception, 'code', str(exception))
+            # Retry on 429 Too Many Requests, 500 Internal Error, 503 Service Unavailable
+            if "429" in str(status) or "500" in str(status) or "503" in str(status):
+                logger.warning(f"Retryable Gemini error encountered: {status}")
+                return True
+        logger.error(f"Non-retryable error or unknown exception: {exception}")
+        return False
+
+    @retry(retry=retry_if_exception(_is_retryable_error), stop=stop_after_attempt(3), wait=wait_exponential(multiplier=5, min=10, max=60))
     def _call_llm(self, prompt: str):
         """Calls the LLM with exponential backoff retry logic."""
         return self.client.models.generate_content(
