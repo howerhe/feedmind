@@ -2,8 +2,11 @@ name: FeedMind AI RSS Aggregator
 
 on:
   schedule:
-    # Run twice a day: 06:00 and 18:00 PST (14:00 and 02:00 UTC)
-    - cron: '0 2,14 * * *'
+    # Run twice a day symmetrically every 12 hours.
+    # 00:00 UTC (17:00 PDT / 16:00 PST) - Ready before 6:30 PM dinner!
+    # 12:00 UTC (05:00 PDT / 04:00 PST) - Ready when waking up!
+    # Both times completely avoid DeepSeek peak hours (01:00-04:00 & 06:00-10:00 UTC).
+    - cron: '0 0,12 * * *'
   workflow_dispatch: # Allow manual trigger
 
 jobs:
