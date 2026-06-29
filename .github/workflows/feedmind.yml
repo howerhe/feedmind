@@ -1,0 +1,53 @@
+name: FeedMind AI RSS Aggregator
+
+on:
+  schedule:
+    # Run twice a day: 06:00 and 18:00 PST (14:00 and 02:00 UTC)
+    - cron: '0 2,14 * * *'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  run-feedmind:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run FeedMind
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OUTPUT_DIR: "output_feeds"
+        run: python main.py
+
+      - name: Commit Database Updates
+        run: |
+          git config --local user.name "github-actions[bot]"
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git add rss_memory.db
+          git diff --quiet && git diff --staged --quiet || (git commit -m "chore: update RSS memory database" && git push)
+          
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: 'output_feeds'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
