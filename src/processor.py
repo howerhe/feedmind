@@ -7,7 +7,7 @@ from typing import List, Optional
 
 import google.genai as genai
 from google.genai.errors import APIError
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception
+from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 from src.models import Article, DigestEvent
 
