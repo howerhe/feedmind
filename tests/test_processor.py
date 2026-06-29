@@ -1,7 +1,7 @@
 import json
 import os
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -10,11 +10,10 @@ from src.processor import Processor
 
 
 @pytest.fixture
-def mock_genai_client():
-    with patch('src.processor.genai.Client') as mock_client_cls:
-        mock_client = MagicMock()
-        mock_client_cls.return_value = mock_client
-        yield mock_client
+def mock_provider_generate():
+    with patch('src.llm_providers.GeminiProvider.generate_summary') as mock_generate:
+        yield mock_generate
+
 
 @pytest.fixture
 def new_articles():
@@ -42,88 +41,92 @@ def new_articles():
         )
     ]
 
-def test_processor_init_no_key():
-    if "GEMINI_API_KEY" in os.environ:
-        del os.environ["GEMINI_API_KEY"]
-    with pytest.raises(ValueError, match="GEMINI_API_KEY environment variable is not set"):
+
+def test_processor_init_no_provider():
+    if "LLM_PROVIDER" in os.environ:
+        del os.environ["LLM_PROVIDER"]
+    with pytest.raises(ValueError, match="LLM_PROVIDER environment variable is not set"):
         Processor()
 
+
 def test_processor_passthrough(new_articles):
-    processor = Processor(api_key="fake-key")
-    digests = processor.process("test-topic", new_articles, [], aggregate=False, summarize=False, is_discourse=False)
+    # Set env so it doesn't fail init
+    with patch.dict(os.environ, {"LLM_PROVIDER": "gemini", "GEMINI_API_KEY": "fake"}):
+        processor = Processor()
+        digests = processor.process("test-topic", new_articles, [], aggregate=False, summarize=False, is_discourse=False)
 
-    assert len(digests) == 2
-    assert digests[0].id.startswith("pt-")
-    assert digests[0].title == "Article 1"
-    assert digests[0].summary_paragraph == "<p>Content 1</p>"
-    assert digests[0].is_passthrough is True
-    assert digests[1].title == "Article 2"
-    assert digests[1].summary_paragraph == "<p>Content 2</p>"
-    assert digests[1].is_passthrough is True
+        assert len(digests) == 2
+        assert digests[0].id.startswith("pt-")
+        assert digests[0].title == "Article 1"
+        assert digests[0].summary_paragraph == "<p>Content 1</p>"
+        assert digests[0].is_passthrough is True
+        assert digests[1].title == "Article 2"
+        assert digests[1].summary_paragraph == "<p>Content 2</p>"
+        assert digests[1].is_passthrough is True
 
-def test_processor_ai_summarize(mock_genai_client, new_articles):
-    processor = Processor(api_key="fake-key")
 
-    # Mock LLM response
-    mock_response = MagicMock()
-    mock_response.text = json.dumps({
-        "events": [
-            {
-                "title": "Grouped Event",
-                "summary": "This is an AI summary.",
-                "source_ids": ["1", "2"]
-            }
-        ]
-    })
-    mock_genai_client.models.generate_content.return_value = mock_response
+def test_processor_ai_summarize(mock_provider_generate, new_articles):
+    with patch.dict(os.environ, {"LLM_PROVIDER": "gemini", "GEMINI_API_KEY": "fake"}):
+        processor = Processor()
 
-    digests = processor.process("test-topic", new_articles, [], aggregate=True, summarize=True, is_discourse=False)
+        # Mock LLM response
+        mock_provider_generate.return_value = json.dumps({
+            "events": [
+                {
+                    "title": "Grouped Event",
+                    "summary": "This is an AI summary.",
+                    "source_ids": ["1", "2"]
+                }
+            ]
+        })
 
-    assert len(digests) == 1
-    assert digests[0].title == "Grouped Event"
-    assert digests[0].summary_paragraph == "This is an AI summary."
-    assert digests[0].source_urls[0]["url"] == "https://test.com/1"
-    assert digests[0].source_urls[1]["url"] == "https://test.com/2"
+        digests = processor.process("test-topic", new_articles, [], aggregate=True, summarize=True, is_discourse=False)
 
-    # Verify the LLM was called
-    mock_genai_client.models.generate_content.assert_called_once()
+        assert len(digests) == 1
+        assert digests[0].title == "Grouped Event"
+        assert digests[0].summary_paragraph == "This is an AI summary."
+        assert digests[0].source_urls[0]["url"] == "https://test.com/1"
+        assert digests[0].source_urls[1]["url"] == "https://test.com/2"
 
-def test_processor_ai_summarize_batching(mock_genai_client):
-    processor = Processor(api_key="fake-key")
+        # Verify the LLM was called
+        mock_provider_generate.assert_called_once()
 
-    # Generate 45 mock articles
-    now = datetime.now(timezone.utc)
-    many_articles = []
-    for i in range(45):
-        many_articles.append(
-            Article(
-                id=str(i),
-                title=f"Article {i}",
-                url=f"https://test.com/{i}",
-                content=f"Content {i}",
-                raw_content=f"<p>Content {i}</p>",
-                published_at=now,
-                topic="test-topic",
-                feed_url="test.xml"
+
+def test_processor_ai_summarize_batching(mock_provider_generate):
+    with patch.dict(os.environ, {"LLM_PROVIDER": "gemini", "GEMINI_API_KEY": "fake"}):
+        processor = Processor()
+
+        # Generate 45 mock articles
+        now = datetime.now(timezone.utc)
+        many_articles = []
+        for i in range(45):
+            many_articles.append(
+                Article(
+                    id=str(i),
+                    title=f"Article {i}",
+                    url=f"https://test.com/{i}",
+                    content=f"Content {i}",
+                    raw_content=f"<p>Content {i}</p>",
+                    published_at=now,
+                    topic="test-topic",
+                    feed_url="test.xml"
+                )
             )
-        )
 
-    # Mock LLM response
-    mock_response = MagicMock()
-    mock_response.text = json.dumps({
-        "events": [
-            {
-                "title": "Grouped Event",
-                "summary": "This is an AI summary.",
-                "source_ids": ["0"]
-            }
-        ]
-    })
-    mock_genai_client.models.generate_content.return_value = mock_response
+        # Mock LLM response
+        mock_provider_generate.return_value = json.dumps({
+            "events": [
+                {
+                    "title": "Grouped Event",
+                    "summary": "This is an AI summary.",
+                    "source_ids": ["0"]
+                }
+            ]
+        })
 
-    digests = processor.process("test-topic", many_articles, [], aggregate=True, summarize=True, is_discourse=False)
+        digests = processor.process("test-topic", many_articles, [], aggregate=True, summarize=True, is_discourse=False)
 
-    # 45 articles / 20 = 3 batches
-    assert mock_genai_client.models.generate_content.call_count == 3
-    # Each batch returned 1 event, so total 3 digests
-    assert len(digests) == 3
+        # 45 articles / 20 = 3 batches
+        assert mock_provider_generate.call_count == 3
+        # Each batch returned 1 event, so total 3 digests
+        assert len(digests) == 3

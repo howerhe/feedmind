@@ -5,10 +5,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
 
-import google.genai as genai
-from google.genai.errors import APIError
-from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
-
+from src.llm_providers import GeminiProvider, OpenAICompatibleProvider
 from src.models import Article, DigestEvent
 
 logger = logging.getLogger(__name__)
@@ -41,21 +38,27 @@ response_schema = {
 class Processor:
     """Handles interaction with Gemini API for deduplication and summarization."""
 
-    def __init__(self, api_key: Optional[str] = None, model_name: Optional[str] = None) -> None:
-        """Initialize the Processor with a Gemini API key.
+    def __init__(self, provider_name: Optional[str] = None, api_key: Optional[str] = None, model_name: Optional[str] = None) -> None:
+        """Initialize the Processor with the specified LLM provider.
 
         Args:
-            api_key (Optional[str]): The Gemini API key. If not provided, it will look for the GEMINI_API_KEY environment variable.
-
-        Raises:
-            ValueError: If the API key is not provided and not found in the environment variables.
+            provider_name (Optional[str]): The name of the LLM provider ('gemini' or 'deepseek').
+            api_key (Optional[str]): The API key (passed for testing).
+            model_name (Optional[str]): Custom model name.
         """
-        self.api_key = api_key or os.environ.get("GEMINI_API_KEY")
-        if not self.api_key:
-            raise ValueError("GEMINI_API_KEY environment variable is not set. Please set it in .env")
+        self.provider_name = provider_name or os.environ.get("LLM_PROVIDER")
 
-        self.client = genai.Client(api_key=self.api_key, http_options={'timeout': 120})
-        self.model_name = model_name or os.environ.get("GEMINI_MODEL") or 'gemini-3.5-flash'
+        if not self.provider_name:
+            raise ValueError("LLM_PROVIDER environment variable is not set. Please set it to 'gemini' or 'deepseek' in .env")
+
+        self.provider_name = self.provider_name.lower()
+
+        if self.provider_name == "gemini":
+            self.provider = GeminiProvider(api_key=api_key, model_name=model_name)
+        elif self.provider_name == "deepseek":
+            self.provider = OpenAICompatibleProvider(api_key=api_key, model_name=model_name)
+        else:
+            raise ValueError(f"Unsupported LLM_PROVIDER: {self.provider_name}")
 
     def process(self, topic: str, new_articles: List[Article], past_digests: List[DigestEvent], aggregate: bool, summarize: bool, is_discourse: bool, prompt_instruction: Optional[str] = None) -> List[DigestEvent]:
         """Process new articles based on the topic mode.
@@ -150,9 +153,9 @@ class Processor:
             prompt = self._build_prompt(topic, batch, past_digests, aggregate, is_discourse, prompt_instruction)
 
             try:
-                logger.info(f"Calling Gemini API for topic '{topic}' (Batch {i+1}/{len(batches)}) with {len(batch)} new articles...")
-                response = self._call_llm(prompt)
-                result_json = json.loads(response.text)
+                logger.info(f"Calling {self.provider_name.capitalize()} API for topic '{topic}' (Batch {i+1}/{len(batches)}) with {len(batch)} new articles...")
+                response_text = self._call_llm(prompt)
+                result_json = json.loads(response_text)
 
                 for item in result_json.get('events', []):
                     # Ensure we only include valid source URLs
@@ -179,37 +182,15 @@ class Processor:
                     ))
 
             except Exception as e:
-                logger.error(f"Error calling Gemini API for '{topic}' (Batch {i+1}/{len(batches)}): {e}")
+                logger.error(f"Error calling {self.provider_name.capitalize()} API for '{topic}' (Batch {i+1}/{len(batches)}): {e}")
                 # We continue to the next batch even if this one fails
 
         logger.info(f"Successfully generated {len(digests)} digest events for '{topic}' across {len(batches)} batches.")
         return alerts + digests
 
-    def _is_retryable_error(exception: Exception) -> bool:
-        if isinstance(exception, APIError):
-            status = getattr(exception, 'code', str(exception))
-            # Retry on 429 Too Many Requests, 500 Internal Error, 503 Service Unavailable, 504 Gateway Timeout
-            if "429" in str(status) or "500" in str(status) or "503" in str(status) or "504" in str(status):
-                logger.warning(f"Retryable Gemini APIError encountered: {status}")
-                return True
-        elif "timeout" in str(exception).lower():
-            logger.warning(f"Retryable timeout exception encountered: {exception}")
-            return True
-        logger.error(f"Non-retryable error or unknown exception: {exception}")
-        return False
-
-    @retry(retry=retry_if_exception(_is_retryable_error), stop=stop_after_attempt(3), wait=wait_exponential(multiplier=5, min=10, max=60))
-    def _call_llm(self, prompt: str):
-        """Calls the LLM with exponential backoff retry logic."""
-        return self.client.models.generate_content(
-            model=self.model_name,
-            contents=prompt,
-            config={
-                'response_mime_type': 'application/json',
-                'response_schema': response_schema,
-                'temperature': 0.3,
-            },
-        )
+    def _call_llm(self, prompt: str) -> str:
+        """Calls the LLM using the selected provider."""
+        return self.provider.generate_summary(prompt, response_schema)
 
     def _build_prompt(self, topic: str, new_articles: List[Article], past_digests: List[DigestEvent], aggregate: bool, is_discourse: bool, prompt_instruction: Optional[str] = None) -> str:
         """Constructs the prompt for the LLM.
@@ -252,7 +233,7 @@ class Processor:
             prompt += "3. For each distinct event, write an engaging summary paragraph of approximately 300 words (adjust if the original text is very short). You MUST translate and write both the TITLE and SUMMARY strictly in Chinese (简体中文), regardless of the original language of the articles.\n"
 
         if is_discourse and not prompt_instruction:
-            prompt += "4. Since these are forum threads, ensure your summary captures the original post's question/premise AND the general consensus or interesting points from the replies if any.\n"
+            prompt += "4. Since these are forum threads, ensure your summary captures the original post's question/premise AND the general consensus or interesting points from the replies if any. Write in a lively, engaging, and conversational tone (like a human storyteller or journalist). AVOID stiff, academic, or formulaic phrases like 'The post reflects...', 'Overall, it shows...', or 'Users discussed...'. Just tell the story of the discussion naturally and make it fun to read.\n"
 
         prompt += "5. Output a JSON object matching the provided schema, containing the events. Use the exact article `id` in the `source_ids` array.\n"
 

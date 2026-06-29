@@ -9,3 +9,4 @@ beautifulsoup4==4.12.3
 python-dotenv==1.0.1
 pydantic==2.8.2
 curl_cffi==0.7.1
+openai>=1.0.0

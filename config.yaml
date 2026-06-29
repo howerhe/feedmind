@@ -53,6 +53,6 @@ topics:
     is_discourse: true
     aggregate: false
     summarize: true
-    prompt: "For each distinct event, write an engaging summary paragraph of approximately 500 words. Ensure your summary captures the original post's question/premise AND the general consensus or interesting points from the replies if any. You MUST translate and write both the TITLE and SUMMARY strictly in Chinese (简体中文), regardless of the original language."
+    prompt: "For each distinct event, write an engaging summary paragraph of approximately 500 words. Ensure your summary captures the original post's question/premise AND the general consensus or interesting points from the replies if any. Write in a lively, engaging, and conversational tone (like a human storyteller or journalist). AVOID stiff, academic, or formulaic phrases like 'The post reflects...', 'Overall, it shows...', or 'Users discussed...'. Just tell the story of the discussion naturally and make it fun to read. You MUST translate and write both the TITLE and SUMMARY strictly in Chinese (简体中文), regardless of the original language."
     feeds:
       - "https://uscardforum.com/top.rss?period=daily"
