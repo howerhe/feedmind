@@ -40,7 +40,7 @@ response_schema = {
 class Processor:
     """Handles interaction with Gemini API for deduplication and summarization."""
 
-    def __init__(self, api_key: Optional[str] = None) -> None:
+    def __init__(self, api_key: Optional[str] = None, model_name: Optional[str] = None) -> None:
         """Initialize the Processor with a Gemini API key.
 
         Args:
@@ -54,7 +54,7 @@ class Processor:
             raise ValueError("GEMINI_API_KEY environment variable is not set. Please set it in .env")
 
         self.client = genai.Client(api_key=self.api_key)
-        self.model_name = 'gemini-3.5-flash'
+        self.model_name = model_name or os.environ.get("GEMINI_MODEL") or 'gemini-3.5-flash'
 
     def process(self, topic: str, new_articles: List[Article], past_digests: List[DigestEvent], aggregate: bool, summarize: bool, is_discourse: bool, prompt_instruction: Optional[str] = None) -> List[DigestEvent]:
         """Process new articles based on the topic mode.
