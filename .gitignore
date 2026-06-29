@@ -30,6 +30,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+.coverage
 
 # SQLite Database
 rss_memory.db
