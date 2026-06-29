@@ -37,6 +37,7 @@ rss_memory.db
 
 # Output directory
 output_feeds/
+dry_run_output/
 
 # OS generated files
 .DS_Store
