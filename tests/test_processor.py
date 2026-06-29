@@ -5,8 +5,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.models import Article, DigestEvent
+from src.models import Article
 from src.processor import Processor
+
 
 @pytest.fixture
 def mock_genai_client():
@@ -48,7 +49,7 @@ def test_processor_init_no_key():
 def test_processor_passthrough(new_articles):
     processor = Processor(api_key="fake-key")
     digests = processor.process("test-topic", new_articles, [], aggregate=False, summarize=False, is_discourse=False)
-    
+
     assert len(digests) == 2
     assert digests[0].id.startswith("pt-")
     assert digests[0].title == "Article 1"
@@ -56,7 +57,7 @@ def test_processor_passthrough(new_articles):
 
 def test_processor_ai_summarize(mock_genai_client, new_articles):
     processor = Processor(api_key="fake-key")
-    
+
     # Mock LLM response
     mock_response = MagicMock()
     mock_response.text = json.dumps({
@@ -69,14 +70,14 @@ def test_processor_ai_summarize(mock_genai_client, new_articles):
         ]
     })
     mock_genai_client.models.generate_content.return_value = mock_response
-    
+
     digests = processor.process("test-topic", new_articles, [], aggregate=True, summarize=True, is_discourse=False)
-    
+
     assert len(digests) == 1
     assert digests[0].title == "Grouped Event"
     assert digests[0].summary_paragraph == "This is an AI summary."
     assert "https://test.com/1" in digests[0].source_urls
     assert "https://test.com/2" in digests[0].source_urls
-    
+
     # Verify the LLM was called
     mock_genai_client.models.generate_content.assert_called_once()
