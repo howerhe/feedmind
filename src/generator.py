@@ -1,6 +1,7 @@
 import logging
 import os
-from datetime import timezone
+from collections import defaultdict
+from datetime import timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from feedgen.feed import FeedGenerator
@@ -50,13 +51,11 @@ class RSSGenerator:
         fg.link(href=link, rel='alternate')
 
         # Logo/Icon
-        logo = topic_config.get("logo")
-        if logo:
-            fg.logo(logo)
+        logo = topic_config.get("logo", "https://howerhe.xyz/feedmind/assets/logo.jpg")
+        fg.logo(logo)
 
-        icon = topic_config.get("icon")
-        if icon:
-            fg.icon(icon)
+        icon = topic_config.get("icon", "https://howerhe.xyz/feedmind/assets/logo.jpg")
+        fg.icon(icon)
 
         fg.language('en')
 
@@ -66,35 +65,53 @@ class RSSGenerator:
             feed_items.extend(all_past_digests)
         feed_items.extend(digests)
 
-        # Sort by published date descending (newest first)
-        feed_items.sort(key=lambda x: x.published_at, reverse=True)
+        # Group items by PST date and morning/evening run
+        grouped_items = defaultdict(list)
+        for digest in feed_items:
+            pst_time = digest.published_at - timedelta(hours=8)
+            date_str = pst_time.strftime('%Y-%m-%d')
+            time_label = "早间摘要" if pst_time.hour < 12 else "晚间摘要"
+            group_key = f"{date_str}-{time_label}"
+            grouped_items[group_key].append(digest)
 
-        # Limit to the most recent 50 items in the feed
-        for digest in feed_items[:50]:
+        # Sort the groups by the most recent article's date descending
+        sorted_groups = sorted(
+            grouped_items.items(),
+            key=lambda item: max(d.published_at for d in item[1]),
+            reverse=True
+        )
+
+        # Limit to the most recent 50 runs in the feed
+        for group_key, digests_in_group in sorted_groups[:50]:
             fe = fg.add_entry()
-            fe.id(digest.id)
-            fe.title(digest.title)
 
-            # Format the summary and source links as HTML for the RSS reader
+            date_str, time_label = group_key.rsplit('-', 1)
+            fe.title(f"{title} - {date_str} {time_label}")
+            fe.id(f"feedmind-{topic_slug}-{group_key}")
+
+            # Concatenate HTML for the group
             html_content = ""
-            if digest.image_url:
-                html_content += f'<img src="{digest.image_url}" style="max-width:100%; height:auto;"/><br/><br/>'
+            for digest in digests_in_group:
+                html_content += f"<h3>{digest.title}</h3>"
+                if digest.image_url:
+                    html_content += f'<img src="{digest.image_url}" style="max-width:100%; height:auto;"/><br/><br/>'
 
-            html_content += f"<p>{digest.summary_paragraph}</p>"
-            if digest.source_urls:
-                html_content += "<ul>"
-                for url in digest.source_urls:
-                    html_content += f'<li><a href="{url}">Source</a></li>'
-                html_content += "</ul>"
+                html_content += f"<p>{digest.summary_paragraph}</p>"
+                if digest.source_urls:
+                    html_content += "<ul>"
+                    for url in digest.source_urls:
+                        html_content += f'<li><a href="{url}">Source</a></li>'
+                    html_content += "</ul>"
+                html_content += "<hr/>"
 
             fe.content(html_content, type='html')
 
             # Make datetime timezone-aware (UTC) for feedgen
-            pub_date = digest.published_at.replace(tzinfo=timezone.utc)
-            fe.published(pub_date)
+            max_pub_date = max(d.published_at for d in digests_in_group)
+            fe.published(max_pub_date.replace(tzinfo=timezone.utc))
 
-            if digest.source_urls:
-                fe.link(href=digest.source_urls[0]) # Main link
+            if digests_in_group and digests_in_group[0].source_urls:
+                fe.link(href=digests_in_group[0].source_urls[0]) # Main link fallback
 
         filename = f"digest_{topic_slug}.xml"
         filepath = os.path.join(self.output_dir, filename)

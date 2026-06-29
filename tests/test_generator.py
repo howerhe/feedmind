@@ -36,6 +36,10 @@ def test_rss_generator(tmp_path):
     content = expected_file.read_text(encoding="utf-8")
     assert "Custom Title" in content
     assert "Custom Description" in content
+    # Grouped RSS item title contains the Custom Title and a time label
+    assert "Custom Title -" in content
+    assert "摘要" in content # Should have 早间摘要 or 晚间摘要
+    # Digest event title is now inside an h3 tag in the HTML content, but HTML is escaped
     assert "Test Digest" in content
     assert "This is a summary." in content
     assert "https://example.com/1" in content

@@ -1,6 +1,7 @@
 import argparse
 import logging
 import os
+import shutil
 from typing import Any, Dict
 
 import yaml
@@ -111,6 +112,147 @@ def main() -> None:
 
             # Generate RSS (pass [] for new_digests since they are already in all_past_digests)
             generator.generate(topic_config, [], all_past_digests)
+
+    # Ensure assets directory exists in output_feeds
+    assets_src = "assets"
+    assets_dest = os.path.join(output_dir, "assets")
+    if os.path.exists(assets_src):
+        os.makedirs(assets_dest, exist_ok=True)
+        for item in os.listdir(assets_src):
+            s = os.path.join(assets_src, item)
+            d = os.path.join(assets_dest, item)
+            if os.path.isfile(s):
+                shutil.copy2(s, d)
+
+    # Generate Landing Page
+    topics_html = ""
+    for topic_config in config.get("topics", []):
+        topic_name = topic_config["name"]
+        topic_slug = topic_name.lower().replace(' ', '-')
+        xml_file = f"digest_{topic_slug}.xml"
+        topics_html += f'''
+            <a href="{xml_file}" class="feed-card">
+                <h2>{topic_name}</h2>
+                <p>{topic_config.get('description', '')}</p>
+                <div class="rss-link">Subscribe to RSS</div>
+            </a>
+        '''
+
+    html_template = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FeedMind - AI RSS Aggregator</title>
+    <link rel="icon" href="assets/favicon.jpg">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {{
+            --bg-color: #0f172a;
+            --text-color: #f8fafc;
+            --card-bg: rgba(30, 41, 59, 0.7);
+            --card-border: rgba(255, 255, 255, 0.1);
+            --accent: #3b82f6;
+            --accent-hover: #60a5fa;
+        }}
+        body {{
+            margin: 0;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            line-height: 1.6;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }}
+        .container {{
+            max-width: 800px;
+            width: 90%;
+            margin: 4rem auto;
+            text-align: center;
+        }}
+        .logo {{
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            margin-bottom: 1rem;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+        }}
+        h1 {{
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(to right, #60a5fa, #a78bfa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }}
+        p.subtitle {{
+            font-size: 1.2rem;
+            color: #94a3b8;
+            margin-bottom: 3rem;
+        }}
+        .feeds-grid {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+        }}
+        .feed-card {{
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 16px;
+            padding: 1.5rem;
+            text-decoration: none;
+            color: inherit;
+            text-align: left;
+            transition: transform 0.2s, box-shadow 0.2s, background 0.2s;
+            backdrop-filter: blur(10px);
+        }}
+        .feed-card:hover {{
+            transform: translateY(-5px);
+            box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+            background: rgba(45, 55, 72, 0.9);
+            border-color: var(--accent);
+        }}
+        .feed-card h2 {{
+            margin-top: 0;
+            margin-bottom: 0.5rem;
+            font-size: 1.25rem;
+        }}
+        .feed-card p {{
+            color: #cbd5e1;
+            font-size: 0.95rem;
+            margin-bottom: 1.5rem;
+        }}
+        .rss-link {{
+            display: inline-block;
+            background: var(--accent);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            font-weight: 600;
+        }}
+        .feed-card:hover .rss-link {{
+            background: var(--accent-hover);
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <img src="assets/logo.jpg" alt="FeedMind Logo" class="logo">
+        <h1>FeedMind</h1>
+        <p class="subtitle">An intelligent, AI-powered RSS aggregator and summarizer.</p>
+
+        <div class="feeds-grid">
+            {topics_html}
+        </div>
+    </div>
+</body>
+</html>
+"""
+    with open(os.path.join(output_dir, "index.html"), "w", encoding="utf-8") as f:
+        f.write(html_template)
+    logger.info("Generated landing page index.html")
 
     logger.info("FeedMind process completed successfully.")
 
