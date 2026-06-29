@@ -54,7 +54,7 @@ class Processor:
         if not self.api_key:
             raise ValueError("GEMINI_API_KEY environment variable is not set. Please set it in .env")
 
-        self.client = genai.Client(api_key=self.api_key)
+        self.client = genai.Client(api_key=self.api_key, http_options={'timeout': 120})
         self.model_name = model_name or os.environ.get("GEMINI_MODEL") or 'gemini-3.5-flash'
 
     def process(self, topic: str, new_articles: List[Article], past_digests: List[DigestEvent], aggregate: bool, summarize: bool, is_discourse: bool, prompt_instruction: Optional[str] = None) -> List[DigestEvent]:
@@ -95,11 +95,12 @@ class Processor:
             digests.append(DigestEvent(
                 id=f"pt-{a.id}",
                 title=a.title,
-                summary_paragraph=a.content[:500] + "..." if len(a.content) > 500 else a.content,
+                summary_paragraph=a.raw_content if a.raw_content else a.content,
                 source_urls=[{"url": a.url, "title": a.title}],
                 topic=a.topic,
                 published_at=a.published_at,
-                image_url=a.image_url
+                image_url=a.image_url,
+                is_passthrough=True
             ))
         return digests
 
@@ -138,54 +139,62 @@ class Processor:
         if not normal_articles:
             return alerts
 
-        prompt = self._build_prompt(topic, normal_articles, past_digests, aggregate, is_discourse, prompt_instruction)
+        digests = []
+        article_map = {a.id: a for a in new_articles}
+        
+        # Batch processing: process at most 20 articles per LLM call to avoid hangs
+        BATCH_SIZE = 20
+        batches = [normal_articles[i:i + BATCH_SIZE] for i in range(0, len(normal_articles), BATCH_SIZE)]
+        
+        for i, batch in enumerate(batches):
+            prompt = self._build_prompt(topic, batch, past_digests, aggregate, is_discourse, prompt_instruction)
 
-        try:
-            logger.info(f"Calling Gemini API for topic '{topic}' with {len(normal_articles)} new articles...")
-            response = self._call_llm(prompt)
-            result_json = json.loads(response.text)
+            try:
+                logger.info(f"Calling Gemini API for topic '{topic}' (Batch {i+1}/{len(batches)}) with {len(batch)} new articles...")
+                response = self._call_llm(prompt)
+                result_json = json.loads(response.text)
 
-            digests = []
-            article_map = {a.id: a for a in new_articles}
+                for item in result_json.get('events', []):
+                    # Ensure we only include valid source URLs
+                    sources = []
+                    image_url = None
+                    for sid in item['source_ids']:
+                        if sid in article_map:
+                            article = article_map[sid]
+                            sources.append({"url": article.url, "title": article.title})
+                            if article.image_url and not image_url:
+                                image_url = article.image_url
 
-            for item in result_json.get('events', []):
-                # Ensure we only include valid source URLs
-                sources = []
-                image_url = None
-                for sid in item['source_ids']:
-                    if sid in article_map:
-                        article = article_map[sid]
-                        sources.append({"url": article.url, "title": article.title})
-                        if article.image_url and not image_url:
-                            image_url = article.image_url
+                    if not sources:
+                        continue # Skip if AI hallucinated IDs or there are no sources
 
-                if not sources:
-                    continue # Skip if AI hallucinated IDs or there are no sources
+                    digests.append(DigestEvent(
+                        id=f"ai-{uuid.uuid4().hex[:8]}",
+                        title=item['title'],
+                        summary_paragraph=item['summary'],
+                        source_urls=sources,
+                        topic=topic,
+                        published_at=datetime.now(timezone.utc),
+                        image_url=image_url
+                    ))
 
-                digests.append(DigestEvent(
-                    id=f"ai-{uuid.uuid4().hex[:8]}",
-                    title=item['title'],
-                    summary_paragraph=item['summary'],
-                    source_urls=sources,
-                    topic=topic,
-                    published_at=datetime.now(timezone.utc),
-                    image_url=image_url
-                ))
+            except Exception as e:
+                logger.error(f"Error calling Gemini API for '{topic}' (Batch {i+1}/{len(batches)}): {e}")
+                # We continue to the next batch even if this one fails
 
-            logger.info(f"Successfully generated {len(digests)} digest events for '{topic}'.")
-            return alerts + digests
-
-        except Exception as e:
-            logger.error(f"Error calling Gemini API for '{topic}': {e}")
-            return alerts
+        logger.info(f"Successfully generated {len(digests)} digest events for '{topic}' across {len(batches)} batches.")
+        return alerts + digests
 
     def _is_retryable_error(exception: Exception) -> bool:
         if isinstance(exception, APIError):
             status = getattr(exception, 'code', str(exception))
-            # Retry on 429 Too Many Requests, 500 Internal Error, 503 Service Unavailable
-            if "429" in str(status) or "500" in str(status) or "503" in str(status):
-                logger.warning(f"Retryable Gemini error encountered: {status}")
+            # Retry on 429 Too Many Requests, 500 Internal Error, 503 Service Unavailable, 504 Gateway Timeout
+            if "429" in str(status) or "500" in str(status) or "503" in str(status) or "504" in str(status):
+                logger.warning(f"Retryable Gemini APIError encountered: {status}")
                 return True
+        elif "timeout" in str(exception).lower():
+            logger.warning(f"Retryable timeout exception encountered: {exception}")
+            return True
         logger.error(f"Non-retryable error or unknown exception: {exception}")
         return False
 

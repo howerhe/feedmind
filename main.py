@@ -80,7 +80,9 @@ def main() -> None:
                 if not memory.article_exists(article.id):
                     new_articles.append(article)
 
-        logger.info(f"Found {len(new_articles)} new, unprocessed articles.")
+        alerts_count = len([a for a in new_articles if a.id.startswith("sys-alert-")])
+        normal_count = len(new_articles) - alerts_count
+        logger.info(f"Found {len(new_articles)} new items ({normal_count} normal articles, {alerts_count} system alerts).")
 
         if not new_articles:
             logger.info("Skipping AI processing. Generating feed from history...")

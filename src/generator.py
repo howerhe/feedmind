@@ -92,6 +92,13 @@ class RSSGenerator:
             # Concatenate HTML for the group
             html_content = ""
             for digest in digests_in_group:
+                if getattr(digest, 'is_passthrough', False):
+                    source_url = digest.source_urls[0]['url'] if digest.source_urls and not isinstance(digest.source_urls[0], str) else (digest.source_urls[0] if digest.source_urls else "#")
+                    html_content += f"<h3><a href='{source_url}'>{digest.title}</a></h3>"
+                    html_content += digest.summary_paragraph
+                    html_content += "<hr/>"
+                    continue
+
                 html_content += f"<h3>{digest.title}</h3>"
                 html_content += f"<p>{digest.summary_paragraph}</p>"
 

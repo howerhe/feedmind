@@ -18,17 +18,19 @@ def test_article_exists(db):
 
     now = datetime.now(timezone.utc)
     article = Article(
-        id="article-1",
-        title="Title",
-        url="https://test.com",
-        content="Content",
-        published_at=now,
+        id="test-id-123",
+        title="Test Article",
+        url="https://test.com/article",
+        content="Test Content",
+        raw_content="<p>Test Content</p>",
+        published_at=datetime.now(timezone.utc),
         topic="test-topic",
-        feed_url="https://test.com/rss"
+        feed_url="https://fake.com/rss",
+        image_url="https://test.com/img.jpg"
     )
     db.save_articles([article])
 
-    assert db.article_exists("article-1") is True
+    assert db.article_exists("test-id-123") is True
     assert db.article_exists("article-2") is False
 
 def test_save_and_get_digests(db):

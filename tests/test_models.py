@@ -10,6 +10,7 @@ def test_article_creation():
         title="Test Title",
         url="https://example.com/test",
         content="Test content",
+        raw_content="<p>Test content</p>",
         published_at=now,
         topic="tech",
         feed_url="https://example.com/rss",
