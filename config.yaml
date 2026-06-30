@@ -1,45 +1,6 @@
 # FeedMind Configuration File
 
 topics:
-  - name: "China News"
-    title: "中国新闻"
-    description: "中外媒体中国新闻每日精华"
-    aggregate: true
-    summarize: true
-    feeds:
-      - "https://plink.anyfeeder.com/jiemian/news"
-      - "https://rsshub.app/zaobao/realtime/china"
-      - "https://plink.anyfeeder.com/nytimes/cn"
-      - "https://plink.anyfeeder.com/bbc/cn"
-      - "https://plink.anyfeeder.com/infzm/news"
-      - "https://morss.it/https://plink.anyfeeder.com/people"
-      - "https://rsshub.rssforever.com/thepaper/featured"
-
-  - name: "US News"
-    title: "US News"
-    description: "US News Daily"
-    aggregate: true
-    summarize: true
-    feeds:
-      - "https://plink.anyfeeder.com/businessinsider"
-      - "https://plink.anyfeeder.com/bbc/world"
-
-  - name: "Tech Updates"
-    title: "Tech Updates"
-    description: "科技更新 Daily"
-    aggregate: true
-    summarize: true
-    feeds:
-      - "https://sspai.com/feed"
-      - "https://www.macrumors.com/macrumors.xml"
-      - "https://plink.anyfeeder.com/ithome/it"
-      - "https://morss.it/https://plink.anyfeeder.com/techcrunch"
-      - "https://plink.anyfeeder.com/arstechnica"
-      - "https://plink.anyfeeder.com/ifanr"
-      - "https://plink.anyfeeder.com/cnbeta"
-      - "https://rsshub.rssforever.com/infoq/recommend"
-      - "https://rsshub.rssforever.com/oschina/news/industry"
-
   - name: "Solidot"
     title: "Solidot"
     aggregate: false
@@ -56,13 +17,3 @@ topics:
     prompt: "For each distinct event, write an engaging summary paragraph of approximately 500 words. Ensure your summary captures the original post's question/premise AND the general consensus or interesting points from the replies if any. Write in a lively, engaging, and conversational tone (like a human storyteller or journalist). AVOID stiff, academic, or formulaic phrases like 'The post reflects...', 'Overall, it shows...', or 'Users discussed...'. Just tell the story of the discussion naturally and make it fun to read. You MUST translate and write both the TITLE and SUMMARY strictly in Chinese (简体中文), regardless of the original language."
     feeds:
       - "https://uscardforum.com/top.rss?period=daily"
-
-  - name: "Finance"
-    title: "财经头条"
-    description: "每日财经快讯与市场洞察聚合"
-    aggregate: true
-    summarize: true
-    feeds:
-      - "https://rsshub.app/cls/telegraph"
-      - "https://rsshub.app/jin10"
-      - "https://rsshub.app/wallstreetcn/live"
