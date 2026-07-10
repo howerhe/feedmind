@@ -67,13 +67,14 @@ def main() -> None:
         aggregate = topic_config.get("aggregate", True)
         summarize = topic_config.get("summarize", True)
         is_discourse = topic_config.get("is_discourse", False)
+        is_1point3acres = topic_config.get("is_1point3acres", False)
         feeds = topic_config["feeds"]
 
         logger.info(f"========== Processing Topic: {topic} (aggregate={aggregate}, summarize={summarize}) ==========")
 
         new_articles = []
         for feed_url in feeds:
-            articles = fetcher.fetch_feed(feed_url, topic, is_discourse)
+            articles = fetcher.fetch_feed(feed_url, topic, is_discourse=is_discourse, is_1point3acres=is_1point3acres)
 
             # Deduplicate locally against DB
             for article in articles:
@@ -93,7 +94,9 @@ def main() -> None:
         if args.dry_run:
             logger.info("[Dry Run] Would process these articles:")
             for a in new_articles:
-                logger.info(f" - {a.title}")
+                logger.info(f" - TITLE: {a.title}")
+                snippet = a.content.replace('\n', ' ')[:200]
+                logger.info(f"   CONTENT PREVIEW: {snippet}...\n")
             continue
 
         # Get recent digests for AI context (deduplication)
@@ -102,7 +105,7 @@ def main() -> None:
         prompt_instruction = topic_config.get("prompt")
 
         # Process and summarize
-        new_digests = processor.process(topic, new_articles, past_digests_context, aggregate, summarize, is_discourse, prompt_instruction)
+        new_digests = processor.process(topic, new_articles, past_digests_context, aggregate, summarize, is_discourse or is_1point3acres, prompt_instruction)
 
         if new_digests:
             # Save state

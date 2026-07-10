@@ -22,13 +22,14 @@ class Fetcher:
             'Accept-Language': 'en-US,en;q=0.9',
         }
 
-    def fetch_feed(self, feed_url: str, topic: str, is_discourse: bool) -> List[Article]:
+    def fetch_feed(self, feed_url: str, topic: str, is_discourse: bool = False, is_1point3acres: bool = False) -> List[Article]:
         """Fetches a feed and parses it into Article objects.
 
         Args:
             feed_url (str): The URL of the RSS feed.
             topic (str): The name of the topic being processed.
             is_discourse (bool): Whether the feed is from a Discourse forum.
+            is_1point3acres (bool): Whether the feed is from 1point3acres.
 
         Returns:
             List[Article]: A list of parsed Article objects. Returns a system alert Article if the fetch fails.
@@ -94,6 +95,10 @@ class Fetcher:
             # If discourse mode, fetch additional context from JSON API
             if is_discourse:
                 thread_content = self._fetch_discourse_thread(link)
+                if thread_content:
+                    content_text = thread_content
+            elif is_1point3acres:
+                thread_content = self._fetch_1point3acres_thread(link)
                 if thread_content:
                     content_text = thread_content
 
@@ -213,4 +218,56 @@ class Fetcher:
 
         except Exception as e:
             logger.warning(f"Failed to fetch discourse thread for {topic_url}: {e}")
+            return ""
+
+    def _fetch_1point3acres_thread(self, topic_url: str) -> str:
+        """Attempt to fetch a 1point3acres topic and extract OP + replies.
+
+        Args:
+            topic_url (str): The URL of the topic (e.g. instant.1point3acres.com/thread/xxx or bbs url).
+
+        Returns:
+            str: The concatenated text of the original post and top replies.
+        """
+        try:
+            import re
+            
+            # Extract thread ID
+            thread_id_match = re.search(r'thread[/-](\d+)', topic_url)
+            if not thread_id_match:
+                return ""
+                
+            thread_id = thread_id_match.group(1)
+            bbs_url = f"https://www.1point3acres.com/bbs/thread-{thread_id}-1-1.html"
+            
+            with requests.Session(impersonate="chrome124", headers=self.headers) as session:
+                resp = session.get(bbs_url, timeout=15)
+                if resp.status_code == 403:
+                    with requests.Session(impersonate="safari17_0", headers=self.headers) as fallback_session:
+                        resp = fallback_session.get(bbs_url, timeout=15)
+                        
+            if resp.status_code != 200:
+                return ""
+                
+            soup = BeautifulSoup(resp.content, 'html.parser')
+            posts = soup.find_all('td', class_='t_f')
+            
+            if not posts:
+                return ""
+                
+            texts = []
+            for i, post in enumerate(posts[:15]): # Limit to 15 posts
+                text = post.get_text(separator='\n', strip=True)
+                # Clean up login banner
+                text = re.sub(r'注册一亩三分地论坛，查看更多干货！\n您需要\s*登录\s*才可以下载或查看附件。没有帐号？\s*注册账号\s*x\n', '', text)
+                
+                if i == 0:
+                    texts.append(f"Original Post:\n{text}")
+                else:
+                    texts.append(f"Reply:\n{text}")
+                    
+            return "\n\n---\n\n".join(texts)
+            
+        except Exception as e:
+            logger.warning(f"Failed to fetch 1point3acres thread for {topic_url}: {e}")
             return ""
