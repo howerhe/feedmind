@@ -129,13 +129,17 @@ class MemoryDB:
                     else:
                         parsed_sources.append(src)
 
+                pub_dt = datetime.fromisoformat(row[4])
+                if pub_dt.tzinfo is None:
+                    pub_dt = pub_dt.replace(tzinfo=timezone.utc)
+
                 results.append(DigestEvent(
                     id=row[0],
                     title=row[1],
                     summary_paragraph=row[2],
                     source_urls=parsed_sources,
                     topic=topic,
-                    published_at=datetime.fromisoformat(row[4]),
+                    published_at=pub_dt,
                     image_url=row[5] if len(row) > 5 else None
                 ))
             return results
