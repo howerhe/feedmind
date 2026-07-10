@@ -37,12 +37,12 @@ class Fetcher:
         logger.info(f"Fetching {feed_url} for topic '{topic}'...")
         try:
             # Try with chrome124 first
-            with requests.Session(impersonate="chrome124", headers=self.headers) as session:
+            with requests.Session(impersonate="chrome124") as session:
                 resp = session.get(feed_url, timeout=15)
                 if resp.status_code == 403:
                     # Fallback to Safari if Chrome fingerprint is blocked
                     logger.warning(f"Got 403 for {feed_url} with Chrome. Retrying with Safari...")
-                    with requests.Session(impersonate="safari17_0", headers=self.headers) as fallback_session:
+                    with requests.Session(impersonate="safari17_0") as fallback_session:
                         resp = fallback_session.get(feed_url, timeout=15)
                         resp.raise_for_status()
                 else:
@@ -187,10 +187,10 @@ class Fetcher:
             # Discourse API is available by appending .json to the topic URL
             json_url = f"{topic_url}.json"
 
-            with requests.Session(impersonate="chrome124", headers=self.headers) as session:
+            with requests.Session(impersonate="chrome124") as session:
                 resp = session.get(json_url, timeout=10)
                 if resp.status_code == 403:
-                    with requests.Session(impersonate="safari17_0", headers=self.headers) as fallback_session:
+                    with requests.Session(impersonate="safari17_0") as fallback_session:
                         resp = fallback_session.get(json_url, timeout=10)
 
             if resp.status_code != 200:
@@ -231,43 +231,43 @@ class Fetcher:
         """
         try:
             import re
-            
+
             # Extract thread ID
             thread_id_match = re.search(r'thread[/-](\d+)', topic_url)
             if not thread_id_match:
                 return ""
-                
+
             thread_id = thread_id_match.group(1)
             bbs_url = f"https://www.1point3acres.com/bbs/thread-{thread_id}-1-1.html"
-            
-            with requests.Session(impersonate="chrome124", headers=self.headers) as session:
+
+            with requests.Session(impersonate="chrome124") as session:
                 resp = session.get(bbs_url, timeout=15)
                 if resp.status_code == 403:
-                    with requests.Session(impersonate="safari17_0", headers=self.headers) as fallback_session:
+                    with requests.Session(impersonate="safari17_0") as fallback_session:
                         resp = fallback_session.get(bbs_url, timeout=15)
-                        
+
             if resp.status_code != 200:
                 return ""
-                
+
             soup = BeautifulSoup(resp.content, 'html.parser')
             posts = soup.find_all('td', class_='t_f')
-            
+
             if not posts:
                 return ""
-                
+
             texts = []
             for i, post in enumerate(posts[:15]): # Limit to 15 posts
                 text = post.get_text(separator='\n', strip=True)
                 # Clean up login banner
                 text = re.sub(r'注册一亩三分地论坛，查看更多干货！\n您需要\s*登录\s*才可以下载或查看附件。没有帐号？\s*注册账号\s*x\n', '', text)
-                
+
                 if i == 0:
                     texts.append(f"Original Post:\n{text}")
                 else:
                     texts.append(f"Reply:\n{text}")
-                    
+
             return "\n\n---\n\n".join(texts)
-            
+
         except Exception as e:
             logger.warning(f"Failed to fetch 1point3acres thread for {topic_url}: {e}")
             return ""
