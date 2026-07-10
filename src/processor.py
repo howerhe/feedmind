@@ -101,7 +101,7 @@ class Processor:
                 summary_paragraph=a.raw_content if a.raw_content else a.content,
                 source_urls=[{"url": a.url, "title": a.title}],
                 topic=a.topic,
-                published_at=a.published_at,
+                published_at=datetime.now(timezone.utc),
                 image_url=a.image_url,
                 is_passthrough=True
             ))
