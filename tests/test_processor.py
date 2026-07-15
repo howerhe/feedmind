@@ -53,9 +53,10 @@ def test_processor_passthrough(new_articles):
     # Set env so it doesn't fail init
     with patch.dict(os.environ, {"LLM_PROVIDER": "gemini", "GEMINI_API_KEY": "fake"}):
         processor = Processor()
-        digests = processor.process("test-topic", new_articles, [], aggregate=False, summarize=False, is_discourse=False)
+        digests, successful = processor.process("test-topic", new_articles, [], aggregate=False, summarize=False, is_discourse=False)
 
         assert len(digests) == 2
+        assert len(successful) == 2
         assert digests[0].id.startswith("pt-")
         assert digests[0].title == "Article 1"
         assert digests[0].summary_paragraph == "<p>Content 1</p>"
@@ -80,9 +81,10 @@ def test_processor_ai_summarize(mock_provider_generate, new_articles):
             ]
         })
 
-        digests = processor.process("test-topic", new_articles, [], aggregate=True, summarize=True, is_discourse=False)
+        digests, successful = processor.process("test-topic", new_articles, [], aggregate=True, summarize=True, is_discourse=False)
 
         assert len(digests) == 1
+        assert len(successful) == 2
         assert digests[0].title == "Grouped Event"
         assert digests[0].summary_paragraph == "This is an AI summary."
         assert digests[0].source_urls[0]["url"] == "https://test.com/1"
@@ -124,9 +126,10 @@ def test_processor_ai_summarize_batching(mock_provider_generate):
             ]
         })
 
-        digests = processor.process("test-topic", many_articles, [], aggregate=True, summarize=True, is_discourse=False)
+        digests, successful = processor.process("test-topic", many_articles, [], aggregate=True, summarize=True, is_discourse=False)
 
         # 45 articles / 20 = 3 batches
         assert mock_provider_generate.call_count == 3
         # Each batch returned 1 event, so total 3 digests
         assert len(digests) == 3
+        assert len(successful) == 45

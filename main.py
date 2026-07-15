@@ -105,11 +105,11 @@ def main() -> None:
         prompt_instruction = topic_config.get("prompt")
 
         # Process and summarize
-        new_digests = processor.process(topic, new_articles, past_digests_context, aggregate, summarize, is_discourse or is_1point3acres, prompt_instruction)
+        new_digests, successful_articles = processor.process(topic, new_articles, past_digests_context, aggregate, summarize, is_discourse or is_1point3acres, prompt_instruction)
 
         if new_digests:
             # Save state
-            memory.save_articles(new_articles)
+            memory.save_articles(successful_articles)
             memory.save_digests(new_digests)
 
             # Fetch longer history for full RSS generation (this now includes the newly saved digests)

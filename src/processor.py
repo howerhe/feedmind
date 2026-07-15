@@ -3,7 +3,7 @@ import logging
 import os
 import uuid
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from src.llm_providers import GeminiProvider, OpenAICompatibleProvider
 from src.models import Article, DigestEvent
@@ -60,7 +60,7 @@ class Processor:
         else:
             raise ValueError(f"Unsupported LLM_PROVIDER: {self.provider_name}")
 
-    def process(self, topic: str, new_articles: List[Article], past_digests: List[DigestEvent], aggregate: bool, summarize: bool, is_discourse: bool, prompt_instruction: Optional[str] = None) -> List[DigestEvent]:
+    def process(self, topic: str, new_articles: List[Article], past_digests: List[DigestEvent], aggregate: bool, summarize: bool, is_discourse: bool, prompt_instruction: Optional[str] = None) -> Tuple[List[DigestEvent], List[Article]]:
         """Process new articles based on the topic mode.
 
         Args:
@@ -73,10 +73,10 @@ class Processor:
             prompt_instruction (Optional[str]): Custom instructions for the LLM prompt.
 
         Returns:
-            List[DigestEvent]: A list of generated digest events.
+            Tuple[List[DigestEvent], List[Article]]: A tuple containing the list of generated digest events and the list of successfully processed articles.
         """
         if not new_articles:
-            return []
+            return [], []
 
         if not summarize:
             return self._passthrough(new_articles)
@@ -84,14 +84,14 @@ class Processor:
         # AI Mode
         return self._ai_summarize(topic, new_articles, past_digests, aggregate, is_discourse, prompt_instruction)
 
-    def _passthrough(self, articles: List[Article]) -> List[DigestEvent]:
+    def _passthrough(self, articles: List[Article]) -> Tuple[List[DigestEvent], List[Article]]:
         """Simple passthrough without AI summary.
 
         Args:
             articles (List[Article]): The list of articles to passthrough.
 
         Returns:
-            List[DigestEvent]: A list of DigestEvents corresponding 1-to-1 with the input articles.
+            Tuple[List[DigestEvent], List[Article]]: A tuple containing digests and the processed articles.
         """
         digests = []
         for a in articles:
@@ -105,9 +105,9 @@ class Processor:
                 image_url=a.image_url,
                 is_passthrough=True
             ))
-        return digests
+        return digests, articles
 
-    def _ai_summarize(self, topic: str, new_articles: List[Article], past_digests: List[DigestEvent], aggregate: bool, is_discourse: bool, prompt_instruction: Optional[str] = None) -> List[DigestEvent]:
+    def _ai_summarize(self, topic: str, new_articles: List[Article], past_digests: List[DigestEvent], aggregate: bool, is_discourse: bool, prompt_instruction: Optional[str] = None) -> Tuple[List[DigestEvent], List[Article]]:
         """Use AI to group, deduplicate, and summarize articles.
 
         Args:
@@ -119,14 +119,16 @@ class Processor:
             prompt_instruction (Optional[str]): Custom instructions for the LLM prompt.
 
         Returns:
-            List[DigestEvent]: A list of AI-generated digest events.
+            Tuple[List[DigestEvent], List[Article]]: A tuple containing AI-generated digest events and successfully processed articles.
         """
 
         # Bypass AI for system alerts
         alerts = []
         normal_articles = []
+        successful_articles = []
         for a in new_articles:
             if a.id.startswith('sys-alert-'):
+                successful_articles.append(a)
                 alerts.append(DigestEvent(
                     id=a.id,
                     title=a.title,
@@ -140,7 +142,7 @@ class Processor:
                 normal_articles.append(a)
 
         if not normal_articles:
-            return alerts
+            return alerts, successful_articles
 
         digests = []
         article_map = {a.id: a for a in new_articles}
@@ -184,9 +186,12 @@ class Processor:
             except Exception as e:
                 logger.error(f"Error calling {self.provider_name.capitalize()} API for '{topic}' (Batch {i+1}/{len(batches)}): {e}")
                 # We continue to the next batch even if this one fails
+            else:
+                # Add this batch to successful articles only if no exception occurred
+                successful_articles.extend(batch)
 
         logger.info(f"Successfully generated {len(digests)} digest events for '{topic}' across {len(batches)} batches.")
-        return alerts + digests
+        return alerts + digests, successful_articles
 
     def _call_llm(self, prompt: str) -> str:
         """Calls the LLM using the selected provider."""
