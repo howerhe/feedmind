@@ -35,6 +35,9 @@ class Fetcher:
             List[Article]: A list of parsed Article objects. Returns a system alert Article if the fetch fails.
         """
         logger.info(f"Fetching {feed_url} for topic '{topic}'...")
+        if is_1point3acres:
+            return self._scrape_1point3acres_hot(topic)
+
         try:
             # Try with chrome124 first
             with requests.Session(impersonate="chrome124") as session:
@@ -97,10 +100,6 @@ class Fetcher:
                 thread_content = self._fetch_discourse_thread(link)
                 if thread_content:
                     content_text = thread_content
-            elif is_1point3acres:
-                thread_content = self._fetch_1point3acres_thread(link)
-                if thread_content:
-                    content_text = thread_content
 
             article = Article(
                 id=article_id,
@@ -116,6 +115,77 @@ class Fetcher:
             articles.append(article)
 
         return articles
+
+    def _scrape_1point3acres_hot(self, topic: str) -> List[Article]:
+        """Scrape the 1point3acres hot guide directly to bypass RSSHub Cloudflare blocks."""
+        url = "https://www.1point3acres.com/bbs/forum.php?mod=guide&view=hot"
+        logger.info(f"Scraping 1point3acres hot guide for topic '{topic}'...")
+        try:
+            with requests.Session(impersonate="chrome124") as session:
+                resp = session.get(url, timeout=15)
+                if resp.status_code == 403:
+                    with requests.Session(impersonate="safari17_0") as fallback_session:
+                        resp = fallback_session.get(url, timeout=15)
+                        resp.raise_for_status()
+                else:
+                    resp.raise_for_status()
+            
+            soup = BeautifulSoup(resp.content, "html.parser")
+            articles = []
+            threads = soup.find_all("th", class_="common")
+            
+            # Limit to top 30 to avoid getting banned when fetching threads
+            for th in threads[:30]:
+                a_tag = th.find("a", class_="xst")
+                if not a_tag:
+                    continue
+                
+                title = a_tag.text
+                href = a_tag.get('href', '')
+                if not href:
+                    continue
+                
+                # Convert relative to absolute
+                if not href.startswith("http"):
+                    link = f"https://www.1point3acres.com/bbs/{href}"
+                else:
+                    link = href
+                    
+                article_id = link
+                published_at = datetime.now(timezone.utc)
+                
+                thread_content = self._fetch_1point3acres_thread(link)
+                if not thread_content:
+                    continue
+                
+                article = Article(
+                    id=article_id,
+                    title=title,
+                    url=link,
+                    content=thread_content,
+                    raw_content=f"<p>{title}</p>", # Placeholder for raw html
+                    published_at=published_at,
+                    topic=topic,
+                    feed_url=url,
+                    image_url=None
+                )
+                articles.append(article)
+            return articles
+        except Exception as e:
+            err_msg = f"Failed to scrape 1point3acres hot threads: {str(e)}"
+            logger.error(err_msg)
+            alert = Article(
+                id=f"sys-alert-{int(time.time())}-{url}",
+                title=f"[FeedMind Alert] Source Fetch Failed: {topic}",
+                url=url,
+                content=err_msg,
+                raw_content=f"<p>{err_msg}</p>",
+                published_at=datetime.now(timezone.utc),
+                topic=topic,
+                feed_url=url,
+                image_url=None
+            )
+            return [alert]
 
     def _extract_image(self, entry: feedparser.FeedParserDict, content_html: str) -> Optional[str]:
         """Extract the best image URL from the RSS entry or HTML content.
