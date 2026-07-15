@@ -129,35 +129,35 @@ class Fetcher:
                         resp.raise_for_status()
                 else:
                     resp.raise_for_status()
-            
+
             soup = BeautifulSoup(resp.content, "html.parser")
             articles = []
             threads = soup.find_all("th", class_="common")
-            
+
             # Limit to top 30 to avoid getting banned when fetching threads
             for th in threads[:30]:
                 a_tag = th.find("a", class_="xst")
                 if not a_tag:
                     continue
-                
+
                 title = a_tag.text
                 href = a_tag.get('href', '')
                 if not href:
                     continue
-                
+
                 # Convert relative to absolute
                 if not href.startswith("http"):
                     link = f"https://www.1point3acres.com/bbs/{href}"
                 else:
                     link = href
-                    
+
                 article_id = link
                 published_at = datetime.now(timezone.utc)
-                
+
                 thread_content = self._fetch_1point3acres_thread(link)
                 if not thread_content:
                     continue
-                
+
                 article = Article(
                     id=article_id,
                     title=title,
